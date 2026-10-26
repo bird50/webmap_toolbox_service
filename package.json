@@ -1,6 +1,6 @@
 {
   "name": "thaiwater-toolbox-service",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,10 @@
     "start": "node --env-file-if-exists=.env --import tsx src/server.ts",
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "key:create": "node --env-file-if-exists=.env --import tsx src/keys.ts create",
+    "key:list": "node --env-file-if-exists=.env --import tsx src/keys.ts list",
+    "key:revoke": "node --env-file-if-exists=.env --import tsx src/keys.ts revoke"
   },
   "dependencies": {
     "exifr": "^7.1.3",

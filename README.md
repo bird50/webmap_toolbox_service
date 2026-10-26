@@ -13,11 +13,31 @@ npm run dev
 npm start
 ```
 
-Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to `./data/toolbox.sqlite`. `TOOLBOX_SERVICE_KEY` is required; startup fails without a sufficiently long key. The database directory and schema are created on startup. Keep `.env` and `data/` private. Configure the web app's `TOOLBOX_SERVICE_URL` and matching key, then restart it.
+Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to `./data/toolbox.sqlite`, `TOOLBOX_DEFAULT_APP_ID` to `default`. Startup needs `TOOLBOX_SERVICE_KEY` (at least 32 characters) or at least one active key created with `npm run key:create`. The database directory and schema are created on startup. Keep `.env` and `data/` private. Configure the web app's `TOOLBOX_SERVICE_URL` and matching key, then restart it.
+
+## Apps and API keys
+
+One service can serve several apps. Every key belongs to one app and carries scopes; every share belongs to the app whose key published it, and an app never reads, serves or deletes another app's shares.
+
+| Scope | Allows |
+| --- | --- |
+| `read` | `GET /public/photos`, `GET /public/drawings`, `GET /public/data-files`, `GET /shares/:id`, photo images |
+| `write` | `POST /shares`, `POST /drawing-shares`, `POST /data-file-shares`, deleting shares whose owner matches `X-Toolbox-Owner` |
+| `moderate` | Deleting any share of the app (the gateway must allow this only for administrators) |
+
+```bash
+npm run key:create -- --app web-b --scopes read,write --label "Web B production"   # prints the key once
+npm run key:list
+npm run key:revoke -- key_1a2b3c4d5e6f                                              # effective on the next request
+```
+
+Give each app its own key per environment (dev, staging, production) and put it in that app's server-side `TOOLBOX_SERVICE_KEY`. Only a SHA-256 hash is stored. To rotate without downtime: create a new key, deploy it to the app, then revoke the old one. `TOOLBOX_SERVICE_KEY` in this service's `.env` remains a key for `TOOLBOX_DEFAULT_APP_ID` with all scopes, so existing gateways keep working; remove it once every app has a table key.
+
+Migration 2 (1.2) adds `data_file_shares`, `data_features` and `data_feature_bounds`. Upgrading from 1.0: the first start (or key command) migrates the database (`PRAGMA user_version` 1), adds `api_keys` and stamps existing shares and audit rows with `TOOLBOX_DEFAULT_APP_ID`. Choose that value before upgrading; back up `data/` first.
 
 ## API contract
 
-All endpoints require `Authorization: Bearer <TOOLBOX_SERVICE_KEY>`. Keep this service on a private network; the web server is the trusted authentication gateway. Do not expose the key to browsers. Publication requests additionally require `X-Toolbox-Owner` and URL-encoded `X-Toolbox-Username` supplied by the gateway after checking the session or signed guest cookie. Never forward client-supplied identity headers.
+All endpoints require `Authorization: Bearer <key>` (see scopes above; `/health` accepts any valid key). Keep this service on a private network; the web server is the trusted authentication gateway. Do not expose the key to browsers. Publication requests additionally require `X-Toolbox-Owner` and URL-encoded `X-Toolbox-Username` supplied by the gateway after checking the session or signed guest cookie. Never forward client-supplied identity headers.
 
 | Method/path | Input / access |
 | --- | --- |
@@ -26,6 +46,9 @@ All endpoints require `Authorization: Bearer <TOOLBOX_SERVICE_KEY>`. Keep this s
 | GET /public/photos | Public through gateway; required bbox, limit 1–200, optional username/eventName/tag/startDate/endDate |
 | GET /shares/:id | Public through gateway; share metadata and at most 10 photos |
 | GET /shares/:shareId/photos/:photoId | Public through gateway; sanitized JPEG |
+| POST /data-file-shares | Gateway identity; JSON `{name,description,tags,data}` — one file's FeatureCollection, 1–5,000 features, 50,000 positions, 5 MiB; adds the `shareYYYY-MM-DD` tag |
+| GET /public/data-files | Required bbox, limit 1–1000 (default 500), optional `search` (name, description, username) and `tag`, combined with AND; features carry `share_name`, `share_description`, `share_tags`, `share_username`, `share_id`; at most 100,000 positions / 4 MiB per response |
+| DELETE /shares/:id, DELETE /drawing-shares/:id, DELETE /data-file-shares/:id | `write` and the owner's `X-Toolbox-Owner`, or `moderate`; removes the share, its photos/drawings and bounds in one transaction and audits `*_DELETED` or `*_MODERATED` |
 
 Returned URLs point to the web gateway (`/api/...`, `/share/...`). A different client must resolve these against the gateway origin. Public APIs never return private photos or owner IDs. SQLite uses parameterized queries, WAL, indexes and transactions. EXIF GPS is read from image bytes; claimed client coordinates are ignored. GPS and capture dates are required for publication. Images are decoded and sanitized before any database write; invalid batches save nothing. Public photos do not expire with local My Photos. Both gateway and HTTP service cap multipart requests at 25 MiB (10 MiB per image); the HTTP service has a 30-second request timeout.
 

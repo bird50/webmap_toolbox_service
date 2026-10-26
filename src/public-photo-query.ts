@@ -16,15 +16,18 @@ export const publicPhotoFilters=z.object({
 export type PublicPhotoFilters=z.infer<typeof publicPhotoFilters>;
 export const emptyPublicPhotoFilters:PublicPhotoFilters={username:"",eventName:"",startDate:"",endDate:"",tag:""};
 
+/** `west,south,east,north` in WGS84; west may exceed east across the antimeridian. */
+export const viewportBbox=z.string().max(160).transform((value,ctx)=>{
+  const parts=value.split(",");
+  const bounds=parts.map(Number);
+  if(parts.length!==4||parts.some(part=>part.trim()==="")||bounds.some(value=>!Number.isFinite(value))||Math.abs(bounds[0])>180||Math.abs(bounds[2])>180||Math.abs(bounds[1])>90||Math.abs(bounds[3])>90||bounds[1]>=bounds[3]||bounds[0]===bounds[2]){
+    ctx.addIssue({code:"custom",message:"Invalid bbox"});return z.NEVER;
+  }
+  return bounds as [number,number,number,number];
+});
+
 export const publicPhotoQuery=z.object({
-  bbox:z.string().max(160).transform((value,ctx)=>{
-    const parts=value.split(",");
-    const bounds=parts.map(Number);
-    if(parts.length!==4||parts.some(part=>part.trim()==="")||bounds.some(value=>!Number.isFinite(value))||Math.abs(bounds[0])>180||Math.abs(bounds[2])>180||Math.abs(bounds[1])>90||Math.abs(bounds[3])>90||bounds[1]>=bounds[3]||bounds[0]===bounds[2]){
-      ctx.addIssue({code:"custom",message:"Invalid bbox"});return z.NEVER;
-    }
-    return bounds as [number,number,number,number];
-  }),
+  bbox:viewportBbox,
   limit:z.coerce.number().int().min(1).max(200).default(200),
 }).and(publicPhotoFilters);
 
