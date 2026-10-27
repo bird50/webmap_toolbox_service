@@ -2,6 +2,13 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createService} from '../src/service.js';
 import {automaticShareTag} from '../src/share-tags.js';
+import {randomUUID} from 'node:crypto';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {openDatabase} from '../src/database.js';
+import {createKey} from '../src/api-keys.js';
+import {publicDataFileSetResponse,publicDataFileShare} from '../src/public-data-file-sets.js';
 
 const key='test-data-files-service-key-at-least-32-characters';
 const point=(x:number,y:number,properties:Record<string,unknown>={})=>({type:'Feature',properties,geometry:{type:'Point',coordinates:[x,y]}});
@@ -29,4 +36,32 @@ test('data file shares: validation, tags, viewport and filter queries, deletion'
   assert.equal((await call(`/data-file-shares/${result.id}`,undefined,'DELETE')).status,200);
   assert.equal((await (await call(view)).json()).features.length,0);
  }finally{service.close();}
+});
+
+test('data file sets: search by name, username, tag and date (AND), newest first; one set with its features; per app',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'toolbox-data-file-sets-')),path=join(dir,'t.sqlite');
+ const db=openDatabase(path);const other=createKey(db,{appId:'web-b',scopes:['read']}).key;db.close();
+ const service=createService(path,key);
+ const call=(path:string,body?:unknown,{username='สมชาย',token=key}:{username?:string;token?:string}={})=>service.handle(new Request(`http://localhost${path}`,{method:body?'POST':'GET',headers:{authorization:`Bearer ${token}`,'x-toolbox-owner':'guest:a','x-toolbox-username':encodeURIComponent(username),'x-toolbox-app-name':encodeURIComponent('ThaiWater GIS'),'content-type':'application/json'},body:body?JSON.stringify(body):undefined}));
+ const search=async(query='',token=key)=>{const response=await call(`/public/data-file-shares?${query}`,undefined,{token});assert.equal(response.status,200,query);return publicDataFileSetResponse.parse(await response.json());};
+ try{
+  const first=await (await call('/data-file-shares',share())).json();
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const second=await (await call('/data-file-shares',share({name:'แนวคลอง',tags:['canal'],data:{type:'FeatureCollection',features:[point(99,12),point(99.5,12.5)]}}),{username:''})).json();
+  const all=await search();
+  assert.deepEqual(all.sets.map(set=>set.id),[second.id,first.id],'newest first');
+  assert.deepEqual({...all.sets[1],createdAt:0},{id:first.id,name:'จุดวัดระดับน้ำ',description:'สำรวจภาคสนาม',tags:[automaticShareTag(),'survey'],username:'สมชาย',appName:'ThaiWater GIS',createdAt:0,featureCount:2,bbox:[100.5,13.7,100.6,13.8]});
+  assert.equal(all.sets[0].username,'anonymous');
+  const today=automaticShareTag().slice(5);
+  for(const [query,ids] of [['name=คลอง',[second.id]],['username=สม',[first.id]],['tag=survey',[first.id]],['tag=canal&username=สม',[]],[`startDate=${today}&endDate=${today}`,[second.id,first.id]],['startDate=2000-01-01&endDate=2000-01-02',[]],['limit=1',[second.id]],['offset=1',[first.id]]] as const)
+   assert.deepEqual((await search(query)).sets.map(set=>set.id),ids,query);
+  assert.equal((await search('limit=1')).hasMore,true);
+  for(const invalid of ['limit=51','startDate=2026-02-30','startDate=2026-10-02&endDate=2026-10-01'])assert.equal((await call(`/public/data-file-shares?${invalid}`)).status,400,invalid);
+  const one=publicDataFileShare.parse(await (await call(`/data-file-shares/${first.id}`)).json());
+  assert.deepEqual([one.name,one.description,one.tags,one.username,one.data.features.length],['จุดวัดระดับน้ำ','สำรวจภาคสนาม',[automaticShareTag(),'survey'],'สมชาย',2]);
+  assert.equal((await call(`/data-file-shares/${randomUUID()}`)).status,404);
+  assert.equal((await call('/data-file-shares/not-an-id')).status,400);
+  assert.equal((await call(`/data-file-shares/${first.id}`,undefined,{token:other})).status,404,'other apps cannot read the set');
+  assert.equal((await search('',other)).sets.length,0);
+ }finally{service.close();rmSync(dir,{recursive:true,force:true});}
 });

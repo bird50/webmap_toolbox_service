@@ -17,7 +17,7 @@ Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to 
 
 ## Modules
 
-Each tool is a module with its own routes and tables: `photos` (`/shares…`, `/public/photos`, `/public/photo-shares`), `drawings` (`/drawing-shares…`, `/public/drawing-shares`, `/public/drawings`) and `data-files` (`/data-file-shares…`, `/public/data-files`). `TOOLBOX_MODULES` is a comma list of the modules this instance serves, for example `TOOLBOX_MODULES=photos` for an app that only publishes photos. Routes of a disabled module answer `404 {"error":"Not found"}`, and its tables are not created on a fresh database; enabling it later creates them on the next start. Unknown names stop the service at startup. `/health`, keys and audit are always available.
+Each tool is a module with its own routes and tables: `photos` (`/shares…`, `/public/photos`, `/public/photo-shares`), `drawings` (`/drawing-shares…`, `/public/drawing-shares`, `/public/drawings`) and `data-files` (`/data-file-shares…`, `/public/data-file-shares`, `/public/data-files`). `TOOLBOX_MODULES` is a comma list of the modules this instance serves, for example `TOOLBOX_MODULES=photos` for an app that only publishes photos. Routes of a disabled module answer `404 {"error":"Not found"}`, and its tables are not created on a fresh database; enabling it later creates them on the next start. Unknown names stop the service at startup. `/health`, keys and audit are always available.
 
 Schema versions are kept per module in the `schema_modules` table. Databases from 1.4 or earlier (`PRAGMA user_version` 1–4) first finish the old global migrations, then every module is recorded at version 1 with all existing rows kept, including tables of modules that are disabled; `user_version` stays 4.
 
@@ -27,7 +27,7 @@ One service can serve several apps. Every key belongs to one app and carries sco
 
 | Scope | Allows |
 | --- | --- |
-| `read` | `GET /public/photos`, `GET /public/photo-shares`, `GET /public/drawings`, `GET /public/drawing-shares`, `GET /public/data-files`, `GET /shares/:id`, `GET /drawing-shares/:id`, photo images |
+| `read` | `GET /public/photos`, `GET /public/photo-shares`, `GET /public/drawings`, `GET /public/drawing-shares`, `GET /public/data-file-shares`, `GET /public/data-files`, `GET /shares/:id`, `GET /drawing-shares/:id`, `GET /data-file-shares/:id`, photo images |
 | `write` | `POST /shares`, `POST /drawing-shares`, `POST /data-file-shares`, deleting shares whose owner matches `X-Toolbox-Owner` |
 | `moderate` | Deleting any share of the app (the gateway must allow this only for administrators) |
 
@@ -54,7 +54,9 @@ All endpoints require `Authorization: Bearer <key>` (see scopes above; `/health`
 | GET /shares/:id | Public through gateway; share metadata and at most 10 photos |
 | GET /shares/:shareId/photos/:photoId | Public through gateway; sanitized JPEG |
 | POST /data-file-shares | Gateway identity; JSON `{name,description,tags,data}` — one file's FeatureCollection, 1–5,000 features, 50,000 positions, 5 MiB; adds the `shareYYYY-MM-DD` tag |
-| GET /public/data-files | Required bbox, limit 1–1000 (default 500), optional `search` (name, description, username) and `tag`, combined with AND; features carry `share_name`, `share_description`, `share_tags`, `share_username`, `share_id`; at most 100,000 positions / 4 MiB per response |
+| GET /public/data-file-shares | `read`; Public data file sets of the app, newest first, with the same filters, paging and limits as `GET /public/drawing-shares`; returns `{sets:[{id,name,description,tags,username,appName,createdAt,featureCount,bbox}],hasMore}` (`bbox` = `[west,south,east,north]` of its features) |
+| GET /data-file-shares/:id | `read`; one set of the app `{id,name,description,tags,username,appName,createdAt,data}` with all its features (at most 5,000), 404 for other apps |
+| GET /public/data-files | Viewport route kept for older clients (SDK 1.10 and earlier); required bbox, limit 1–1000 (default 500), optional `search` (name, description, username) and `tag`, combined with AND; features carry `share_name`, `share_description`, `share_tags`, `share_username`, `share_id`; at most 100,000 positions / 4 MiB per response |
 | POST /drawing-shares | Gateway identity; JSON `{name,tags?,drawings}` (up to 10 tags; the service adds `shareYYYY-MM-DD` first); returns `{id,count,tags,appName,username}` |
 | GET /public/drawing-shares | `read`; Public drawing sets of the app, newest first: optional `name`/`username` (part), `tag` (whole), `startDate`/`endDate` (publication day, Thai time), combined with AND; `offset` 0–10,000, `limit` 1–50 (default 20); returns `{sets:[{id,name,tags,username,appName,createdAt,drawingCount,bbox}],hasMore}` (`bbox` = `[west,south,east,north]` of its drawings) |
 | GET /drawing-shares/:id | `read`; one set of the app `{id,name,tags,username,appName,createdAt,drawings}`, 404 for other apps |
