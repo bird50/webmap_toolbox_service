@@ -4,6 +4,7 @@ import {boundedFormData,prepareSharedPhoto,PhotoUploadError} from './upload.js';
 import {shareFields,automaticShareTag,photoCaptions} from './photo-share.js';
 import {dataFileShareSchema,MAX_DATA_SHARE_BYTES,positions,publicDataFileQuery} from './data-file-share.js';
 import {publicPhotoQuery} from './public-photo-query.js';
+import {publicPhotoSetQuery} from './public-photo-sets.js';
 import {drawingShareSchema} from './drawing-contract.js';
 import {openDatabase} from './database.js';
 import {activeKeyCount,resolveKey,SCOPES,type Caller,type Scope} from './api-keys.js';
@@ -110,6 +111,18 @@ export function createService(path:string,legacyKey='',{defaultAppId='default'}:
  for(const [index,p] of photos.entries())db.prepare('INSERT INTO photos(id,owner,name,longitude,latitude,capturedAt,capturedOffset,createdAt,expiresAt,shareId,image,caption) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),owner,p.name,p.longitude,p.latitude,p.capturedAt,p.capturedOffset,Date.now(),null,shareId,p.image,captions[index]??'');
  audit(app,owner,'PHOTO_SHARE_PUBLISHED',shareId);return {id:shareId,tags,url:`/share/${shareId}`,appName,username};});return json(result,201);
  }
+ if(path==='/public/photo-shares'&&request.method==='GET'){
+ const forbidden=denied('read');if(forbidden)return forbidden;
+ const q=publicPhotoSetQuery.parse(Object.fromEntries(url.searchParams));
+ const args:(string|number)[]=[app];const filters:string[]=[];
+ if(q.eventName){filters.push('instr(lower(s.eventName),lower(?))>0');args.push(q.eventName);}
+ if(q.username){filters.push('instr(lower(s.username),lower(?))>0');args.push(q.username);}
+ if(q.tag){filters.push('EXISTS (SELECT 1 FROM json_each(s.tags) WHERE value=?)');args.push(q.tag);}
+ if(q.startDate||q.endDate){filters.push('EXISTS (SELECT 1 FROM photos q WHERE q.shareId=s.id AND q.capturedAt>=? AND q.capturedAt<=?)');args.push(q.startDate?`${q.startDate}T00:00:00`:'0000',q.endDate?`${q.endDate}T23:59:59`:'9999');}
+ args.push(q.limit+1,q.offset);
+ const rows=db.prepare(`SELECT s.id,s.eventName,s.tags,s.username,s.appName,s.createdAt,count(p.id) AS photoCount,min(p.capturedAt) AS capturedFrom,max(p.capturedAt) AS capturedTo,min(p.longitude) AS west,min(p.latitude) AS south,max(p.longitude) AS east,max(p.latitude) AS north FROM shares s JOIN photos p ON p.shareId=s.id WHERE s.appId=? ${filters.map(filter=>`AND ${filter}`).join(' ')} GROUP BY s.id ORDER BY s.createdAt DESC,s.id DESC LIMIT ? OFFSET ?`).all(...args) as {id:string;eventName:string;tags:string;username:string;appName:string;createdAt:number;photoCount:number;capturedFrom:string|null;capturedTo:string|null;west:number;south:number;east:number;north:number}[];
+ return json({sets:rows.slice(0,q.limit).map(row=>({id:row.id,eventName:row.eventName,tags:JSON.parse(row.tags),username:row.username,appName:row.appName,createdAt:row.createdAt,photoCount:row.photoCount,capturedFrom:row.capturedFrom,capturedTo:row.capturedTo,bbox:[row.west,row.south,row.east,row.north],url:`/share/${row.id}`})),hasMore:rows.length>q.limit});
+ }
  if(path==='/public/photos'&&request.method==='GET'){
  const forbidden=denied('read');if(forbidden)return forbidden;
  const q=publicPhotoQuery.parse(Object.fromEntries(url.searchParams));const [w,s,e,n]=q.bbox;
@@ -140,7 +153,7 @@ export function createService(path:string,legacyKey='',{defaultAppId='default'}:
  });
  return json({id:shareId,deleted:true});
  }
- if(shareMatch&&shareMatch[1]==='shares'&&request.method==='GET'){const forbidden=denied('read');if(forbidden)return forbidden;const shareId=id.parse(shareMatch[2]);const share=db.prepare('SELECT eventName,tags,username,appName FROM shares WHERE id=? AND appId=?').get(shareId,app) as {eventName:string;tags:string;username:string;appName:string}|undefined;if(!share)return json({error:'ไม่พบข้อมูล'},404);return json({...share,tags:JSON.parse(share.tags),photos:(db.prepare(`SELECT ${columns} FROM photos p WHERE shareId=? ORDER BY createdAt,id LIMIT 10`).all(shareId) as Row[]).map(meta)});}
+ if(shareMatch&&shareMatch[1]==='shares'&&request.method==='GET'){const forbidden=denied('read');if(forbidden)return forbidden;const shareId=id.parse(shareMatch[2]);const share=db.prepare('SELECT id,eventName,tags,username,appName FROM shares WHERE id=? AND appId=?').get(shareId,app) as {id:string;eventName:string;tags:string;username:string;appName:string}|undefined;if(!share)return json({error:'ไม่พบข้อมูล'},404);return json({...share,tags:JSON.parse(share.tags),photos:(db.prepare(`SELECT ${columns} FROM photos p WHERE shareId=? ORDER BY createdAt,id LIMIT 10`).all(shareId) as Row[]).map(meta)});}
  const publicMatch=path.match(/^\/shares\/([^/]+)\/photos\/([^/]+)$/);
  if(publicMatch&&request.method==='GET'){
  const forbidden=denied('read');if(forbidden)return forbidden;

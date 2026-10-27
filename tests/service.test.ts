@@ -43,6 +43,13 @@ test("Public upload from local photos: validation, atomicity, filters and persis
  assert.deepEqual([anonymous.appName,anonymous.username],['ThaiWater GIS','anonymous'],'no username is stored as anonymous');
  const page=await (await call(`/shares/${anonymous.id}`)).json();assert.deepEqual([page.appName,page.username],['ThaiWater GIS','anonymous']);
  assert.equal((await call(`/shares/${anonymous.id}`,"DELETE")).status,200);
+ const sets=await (await call("/public/photo-shares")).json();
+ assert.deepEqual(sets.sets.map((set:{id:string;eventName:string;photoCount:number;username:string;tags:string[]})=>[set.id,set.eventName,set.photoCount,set.username,set.tags.includes('survey')]),[[share.id,'Flood',1,'Alice',true]]);
+ assert.deepEqual(sets.sets[0].bbox,[100.25,13.5,100.25,13.5]);
+ assert.equal(sets.hasMore,false);
+ for(const filter of ["eventName=flo","username=ali","tag=survey","startDate=2026-10-18&endDate=2026-10-18","eventName=Flood&tag=survey"])assert.equal((await (await call(`/public/photo-shares?${filter}`)).json()).sets.length,1,filter);
+ for(const filter of ["eventName=missing","eventName=Flood&tag=missing","startDate=2026-10-19","offset=1"])assert.equal((await (await call(`/public/photo-shares?${filter}`)).json()).sets.length,0,filter);
+ assert.equal((await call("/public/photo-shares?limit=51")).status,400);
  for(const filter of ["eventName=Flood","tag=survey","username=Alice","startDate=2026-10-18&endDate=2026-10-18","eventName=missing&tag=survey"]){assert.equal((await (await call(`${query}&${filter}`)).json()).photos.length,1);}
  assert.equal((await (await call(`${query}&tag=missing`)).json()).photos.length,0);
  assert.equal((await (await call("/public/photos?bbox=170,-20,-170,20")).json()).photos.length,0);

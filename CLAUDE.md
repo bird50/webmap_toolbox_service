@@ -11,9 +11,9 @@ Private Node.js 22 HTTP service that stores **Public** photos and drawings in SQ
 | `src/database.ts` | `openDatabase`: base schema + migrations on `PRAGMA user_version` (v1 = api_keys, `appId` columns) |
 | `src/api-keys.ts`, `src/keys.ts` | Key store (SHA-256 hashes, scopes `read`/`write`/`moderate`) and the `key:create`/`key:list`/`key:revoke` CLI |
 | `src/upload.ts` | multipart parsing, EXIF check, sharp re-encode to JPEG (≤2400 px, metadata stripped) |
-| `src/photo-gps.ts`, `photo-share.ts`, `share-tags.ts`, `public-photo-query.ts`, `drawing-contract.ts`, `data-file-share.ts` | Validation and contracts — **byte-identical copies of `../toolbox_sdk/src/core/*`** |
+| `src/photo-gps.ts`, `photo-share.ts`, `share-tags.ts`, `public-photo-query.ts`, `public-photo-sets.ts`, `drawing-contract.ts`, `data-file-share.ts` | Validation and contracts — **byte-identical copies of `../toolbox_sdk/src/core/*`** |
 
-Routes: `GET /health`, `POST /shares`, `GET /public/photos`, `GET /shares/:id`, `GET /shares/:shareId/photos/:photoId`, `POST /drawing-shares`, `GET /public/drawings`, `POST /data-file-shares`, `GET /public/data-files`, `DELETE /shares/:id`, `DELETE /drawing-shares/:id`, `DELETE /data-file-shares/:id`.
+Routes: `GET /health`, `POST /shares`, `GET /public/photos`, `GET /public/photo-shares`, `GET /shares/:id`, `GET /shares/:shareId/photos/:photoId`, `POST /drawing-shares`, `GET /public/drawings`, `POST /data-file-shares`, `GET /public/data-files`, `DELETE /shares/:id`, `DELETE /drawing-shares/:id`, `DELETE /data-file-shares/:id`.
 
 ## Rules
 

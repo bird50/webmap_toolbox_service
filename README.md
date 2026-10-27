@@ -43,6 +43,7 @@ All endpoints require `Authorization: Bearer <key>` (see scopes above; `/health`
 | --- | --- |
 | GET /health | Service health |
 | POST /shares | Authenticated gateway identity; multipart `eventName`, JSON-encoded `tags`, 1–10 `photos` files and optional JSON-encoded `captions` (strings up to 500 characters in photo order; returned as `caption` by `GET /public/photos` and `GET /shares/:id`, migration v4) |
+| GET /public/photo-shares | `read`; Public photo sets of the app, newest first: optional `eventName`/`username` (part), `tag` (whole), `startDate`/`endDate` (a photo taken in the range), combined with AND; `offset` 0–10,000, `limit` 1–50 (default 20); returns `{sets:[{id,eventName,tags,username,appName,createdAt,photoCount,capturedFrom,capturedTo,bbox,url}],hasMore}` |
 | GET /public/photos | Public through gateway; required bbox, limit 1–200, optional username/eventName/tag/startDate/endDate |
 | GET /shares/:id | Public through gateway; share metadata and at most 10 photos |
 | GET /shares/:shareId/photos/:photoId | Public through gateway; sanitized JPEG |
