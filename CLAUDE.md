@@ -14,9 +14,9 @@ Private Node.js 22 HTTP service that stores **Public** photos, drawings and data
 | `src/database.ts` | `openDatabase(path, defaultAppId, schemas)`: frozen legacy list on `PRAGMA user_version` 1–4, then per-module versions in `schema_modules` (core + enabled modules only) |
 | `src/api-keys.ts`, `src/keys.ts` | Key store (SHA-256 hashes, scopes `read`/`write`/`moderate`) and the `key:create`/`key:list`/`key:revoke` CLI |
 | `src/upload.ts` | multipart parsing, EXIF check, sharp re-encode to JPEG (≤2400 px, metadata stripped) |
-| `src/photo-gps.ts`, `photo-share.ts`, `share-tags.ts`, `public-photo-query.ts`, `public-photo-sets.ts`, `drawing-contract.ts`, `data-file-share.ts` | Validation and contracts — **byte-identical copies of `../toolbox_sdk/src/core/*`** |
+| `src/photo-gps.ts`, `photo-share.ts`, `share-tags.ts`, `public-photo-query.ts`, `public-photo-sets.ts`, `drawing-contract.ts`, `public-drawing-sets.ts`, `data-file-share.ts` | Validation and contracts — **byte-identical copies of `../toolbox_sdk/src/core/*`** |
 
-Routes (each only when its module is enabled): `GET /health`, `POST /shares`, `GET /public/photos`, `GET /public/photo-shares`, `GET /shares/:id`, `GET /shares/:shareId/photos/:photoId`, `POST /drawing-shares`, `GET /public/drawings`, `POST /data-file-shares`, `GET /public/data-files`, `DELETE /shares/:id`, `DELETE /drawing-shares/:id`, `DELETE /data-file-shares/:id`.
+Routes (each only when its module is enabled): `GET /health`, `POST /shares`, `GET /public/photos`, `GET /public/photo-shares`, `GET /shares/:id`, `GET /shares/:shareId/photos/:photoId`, `POST /drawing-shares`, `GET /public/drawing-shares`, `GET /drawing-shares/:id`, `GET /public/drawings`, `POST /data-file-shares`, `GET /public/data-files`, `DELETE /shares/:id`, `DELETE /drawing-shares/:id`, `DELETE /data-file-shares/:id`.
 
 ## Rules
 

@@ -17,7 +17,7 @@ Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to 
 
 ## Modules
 
-Each tool is a module with its own routes and tables: `photos` (`/shares…`, `/public/photos`, `/public/photo-shares`), `drawings` (`/drawing-shares…`, `/public/drawings`) and `data-files` (`/data-file-shares…`, `/public/data-files`). `TOOLBOX_MODULES` is a comma list of the modules this instance serves, for example `TOOLBOX_MODULES=photos` for an app that only publishes photos. Routes of a disabled module answer `404 {"error":"Not found"}`, and its tables are not created on a fresh database; enabling it later creates them on the next start. Unknown names stop the service at startup. `/health`, keys and audit are always available.
+Each tool is a module with its own routes and tables: `photos` (`/shares…`, `/public/photos`, `/public/photo-shares`), `drawings` (`/drawing-shares…`, `/public/drawing-shares`, `/public/drawings`) and `data-files` (`/data-file-shares…`, `/public/data-files`). `TOOLBOX_MODULES` is a comma list of the modules this instance serves, for example `TOOLBOX_MODULES=photos` for an app that only publishes photos. Routes of a disabled module answer `404 {"error":"Not found"}`, and its tables are not created on a fresh database; enabling it later creates them on the next start. Unknown names stop the service at startup. `/health`, keys and audit are always available.
 
 Schema versions are kept per module in the `schema_modules` table. Databases from 1.4 or earlier (`PRAGMA user_version` 1–4) first finish the old global migrations, then every module is recorded at version 1 with all existing rows kept, including tables of modules that are disabled; `user_version` stays 4.
 
@@ -27,7 +27,7 @@ One service can serve several apps. Every key belongs to one app and carries sco
 
 | Scope | Allows |
 | --- | --- |
-| `read` | `GET /public/photos`, `GET /public/drawings`, `GET /public/data-files`, `GET /shares/:id`, photo images |
+| `read` | `GET /public/photos`, `GET /public/photo-shares`, `GET /public/drawings`, `GET /public/drawing-shares`, `GET /public/data-files`, `GET /shares/:id`, `GET /drawing-shares/:id`, photo images |
 | `write` | `POST /shares`, `POST /drawing-shares`, `POST /data-file-shares`, deleting shares whose owner matches `X-Toolbox-Owner` |
 | `moderate` | Deleting any share of the app (the gateway must allow this only for administrators) |
 
@@ -55,6 +55,10 @@ All endpoints require `Authorization: Bearer <key>` (see scopes above; `/health`
 | GET /shares/:shareId/photos/:photoId | Public through gateway; sanitized JPEG |
 | POST /data-file-shares | Gateway identity; JSON `{name,description,tags,data}` — one file's FeatureCollection, 1–5,000 features, 50,000 positions, 5 MiB; adds the `shareYYYY-MM-DD` tag |
 | GET /public/data-files | Required bbox, limit 1–1000 (default 500), optional `search` (name, description, username) and `tag`, combined with AND; features carry `share_name`, `share_description`, `share_tags`, `share_username`, `share_id`; at most 100,000 positions / 4 MiB per response |
+| POST /drawing-shares | Gateway identity; JSON `{name,tags?,drawings}` (up to 10 tags; the service adds `shareYYYY-MM-DD` first); returns `{id,count,tags,appName,username}` |
+| GET /public/drawing-shares | `read`; Public drawing sets of the app, newest first: optional `name`/`username` (part), `tag` (whole), `startDate`/`endDate` (publication day, Thai time), combined with AND; `offset` 0–10,000, `limit` 1–50 (default 20); returns `{sets:[{id,name,tags,username,appName,createdAt,drawingCount,bbox}],hasMore}` (`bbox` = `[west,south,east,north]` of its drawings) |
+| GET /drawing-shares/:id | `read`; one set of the app `{id,name,tags,username,appName,createdAt,drawings}`, 404 for other apps |
+| GET /public/drawings | `read`; drawings intersecting a required bbox (see Drawings); kept for older clients |
 | DELETE /shares/:id, DELETE /drawing-shares/:id, DELETE /data-file-shares/:id | `write` and the owner's `X-Toolbox-Owner`, or `moderate`; removes the share, its photos/drawings and bounds in one transaction and audits `*_DELETED` or `*_MODERATED` |
 
 Returned URLs point to the web gateway (`/api/...`, `/share/...`). A different client must resolve these against the gateway origin. Public APIs never return private photos or owner IDs. SQLite uses parameterized queries, WAL, indexes and transactions. EXIF GPS is read from image bytes; claimed client coordinates are ignored. GPS and capture dates are required for publication. Images are decoded and sanitized before any database write; invalid batches save nothing. Public photos do not expire with local My Photos. Both gateway and HTTP service cap multipart requests at 25 MiB (10 MiB per image); the HTTP service has a 30-second request timeout.
@@ -78,6 +82,6 @@ Browser IndexedDB remains the original My Photos store. PostgreSQL public photo 
 
 ## Drawings
 
-My Drawing stays in browser IndexedDB; this service only stores explicit public publications. `POST /drawing-shares` requires the same gateway identity as photo publication and accepts JSON `{name,drawings}` (1–100 objects, 20,000 total coordinates, 1 MiB). Drawings preserve tool, WGS84 points, text, style and box dimensions. Zod validates geometry minimums/closed rings, coordinate bounds, UUIDs, text lengths and safe colors/fonts/style ranges. Each publication generates new object IDs and writes drawing_shares/drawings/drawing_bounds plus audit atomically.
+My Drawing stays in browser IndexedDB; this service only stores explicit public publications. `POST /drawing-shares` requires the same gateway identity as photo publication and accepts JSON `{name,tags,drawings}` (`tags` optional; sets from before 1.6 have none, drawings module migration v2) (1–100 objects, 20,000 total coordinates, 1 MiB). Drawings preserve tool, WGS84 points, text, style and box dimensions. Zod validates geometry minimums/closed rings, coordinate bounds, UUIDs, text lengths and safe colors/fonts/style ranges. Each publication generates new object IDs and writes drawing_shares/drawings/drawing_bounds plus audit atomically.
 
 `GET /public/drawings?bbox=west,south,east,north&limit=50` returns `{drawings,hasMore}` for numeric bounding boxes intersecting the viewport, including antimeridian viewports. Numeric B-tree indexes support bounded queries (the bundled Node SQLite does not include R-tree). Maximum response is 50 objects, 20,000 points and about 1 MiB. Bounds can produce false positives for irregular geometry; large deployments should use exact spatial predicates and tiles. Public rows never expose owner IDs. Public copies do not expire and do not change when local drawings are edited.

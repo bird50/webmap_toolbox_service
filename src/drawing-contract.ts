@@ -1,4 +1,5 @@
 import {z} from "zod";
+import {shareTags} from "./share-tags.js";
 const color=z.string().regex(/^#[0-9a-f]{6}$/i);
 const coordinate=z.tuple([z.number().min(-180).max(180),z.number().min(-90).max(90)]);
 export const drawingSchema=z.object({
@@ -14,4 +15,5 @@ export const drawingSchema=z.object({
 export const drawingCollection=z.array(drawingSchema).max(500).superRefine((items,ctx)=>{
  if(new Set(items.map(d=>d.id)).size!==items.length||items.reduce((n,d)=>n+d.points.length,0)>20000)ctx.addIssue({code:"custom",message:"ID ซ้ำ หรือเกิน 20,000 จุด"});
 });
-export const drawingShareSchema=z.object({name:z.string().trim().min(1).max(160),drawings:drawingCollection.refine(items=>items.length>0&&items.length<=100,"แชร์ครั้งละ 1–100 วัตถุ")});
+/** A drawing set published to Public: its name, up to 10 tags (the dated `shareYYYY-MM-DD` tag is added by the service) and 1–100 objects. */
+export const drawingShareSchema=z.object({name:z.string().trim().min(1).max(160),tags:shareTags.default([]),drawings:drawingCollection.refine(items=>items.length>0&&items.length<=100,"แชร์ครั้งละ 1–100 วัตถุ")});
