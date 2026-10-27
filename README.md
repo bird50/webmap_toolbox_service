@@ -13,7 +13,13 @@ npm run dev
 npm start
 ```
 
-Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to `./data/toolbox.sqlite`, `TOOLBOX_DEFAULT_APP_ID` to `default`. Startup needs `TOOLBOX_SERVICE_KEY` (at least 32 characters) or at least one active key created with `npm run key:create`. The database directory and schema are created on startup. Keep `.env` and `data/` private. Configure the web app's `TOOLBOX_SERVICE_URL` and matching key, then restart it.
+Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to `./data/toolbox.sqlite`, `TOOLBOX_DEFAULT_APP_ID` to `default`, `TOOLBOX_MODULES` to `photos,drawings,data-files` (see Modules). Startup needs `TOOLBOX_SERVICE_KEY` (at least 32 characters) or at least one active key created with `npm run key:create`. The database directory and schema are created on startup. Keep `.env` and `data/` private. Configure the web app's `TOOLBOX_SERVICE_URL` and matching key, then restart it.
+
+## Modules
+
+Each tool is a module with its own routes and tables: `photos` (`/shares…`, `/public/photos`, `/public/photo-shares`), `drawings` (`/drawing-shares…`, `/public/drawings`) and `data-files` (`/data-file-shares…`, `/public/data-files`). `TOOLBOX_MODULES` is a comma list of the modules this instance serves, for example `TOOLBOX_MODULES=photos` for an app that only publishes photos. Routes of a disabled module answer `404 {"error":"Not found"}`, and its tables are not created on a fresh database; enabling it later creates them on the next start. Unknown names stop the service at startup. `/health`, keys and audit are always available.
+
+Schema versions are kept per module in the `schema_modules` table. Databases from 1.4 or earlier (`PRAGMA user_version` 1–4) first finish the old global migrations, then every module is recorded at version 1 with all existing rows kept, including tables of modules that are disabled; `user_version` stays 4.
 
 ## Apps and API keys
 
