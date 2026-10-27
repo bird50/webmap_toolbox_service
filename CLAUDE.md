@@ -18,7 +18,7 @@ Routes: `GET /health`, `POST /shares`, `GET /public/photos`, `GET /shares/:id`, 
 ## Rules
 
 - **Tenants.** Every key belongs to one app; every new query must filter by the caller's `appId` and every route must check a scope (`denied(...)`). Tests in `tests/api-keys.test.ts` cover isolation, scopes, deletion and migration.
-- **Trust boundary.** Every route requires `Authorization: Bearer <key>` (a table key or the legacy `TOOLBOX_SERVICE_KEY`). Owner identity comes only from gateway headers `X-Toolbox-Owner` / `X-Toolbox-Username`; never accept identity from request bodies, and never return owner IDs in public responses.
+- **Trust boundary.** Every route requires `Authorization: Bearer <key>` (a table key or the legacy `TOOLBOX_SERVICE_KEY`). Owner identity comes only from gateway headers `X-Toolbox-Owner` / `X-Toolbox-Username` (empty = `anonymous`) / `X-Toolbox-App-Name` (empty = app ID); never accept identity from request bodies, and never return owner IDs in public responses.
 - **Keep it private.** Default bind is `127.0.0.1:4010`; do not add CORS or expose it publicly. Browser-facing concerns (sessions, CSRF/same-origin, rate limits) belong to the gateway.
 - **Contract changes span three projects.** Changing a route, field or limit means updating the shared contract files here and in `../toolbox_sdk/src/core` identically, the SDK client/components, and the web gateway routes. Keep limits in sync (25 MiB / 10 photos / 1 MiB drawings / 5 MiB and 5,000 features per data file share / 200 photos, 50 drawings and 1,000 data file features per response).
 - **SQL.** Parameterized placeholders only. Multi-row writes (share + photos/drawings + bounds + audit) stay in one transaction so failed batches save nothing.

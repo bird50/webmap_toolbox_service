@@ -79,7 +79,7 @@ test('migration: rows from before apps belong to the legacy key’s app, and a s
  try{
   assert.equal((await drawings(client(service,legacy))).length,1,'old rows stay visible to the legacy key');
   const db=new DatabaseSync(path);
-  assert.equal((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version,2);
+  assert.equal((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version,4);
   assert.equal((db.prepare('SELECT appId FROM drawing_shares').get() as {appId:string}).appId,'thaiwater');
   db.close();
  }finally{service.close();}

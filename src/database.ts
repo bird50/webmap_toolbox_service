@@ -42,6 +42,10 @@ export function openDatabase(path:string,defaultAppId='default'){
    CREATE TABLE data_feature_bounds(featureId INTEGER PRIMARY KEY REFERENCES data_features(id),minX REAL NOT NULL,maxX REAL NOT NULL,minY REAL NOT NULL,maxY REAL NOT NULL);
    CREATE INDEX data_feature_bounds_lat ON data_feature_bounds(maxY,minY);
    CREATE INDEX data_feature_bounds_lon ON data_feature_bounds(maxX,minX);`),
+  // v3: the publishing app's display name on every share; older rows take their app ID.
+  ()=>{for(const table of ['shares','drawing_shares','data_file_shares'])db.exec(`ALTER TABLE ${table} ADD COLUMN appName TEXT NOT NULL DEFAULT '';UPDATE ${table} SET appName=appId;`);},
+  // v4: the uploader's caption for each Public photo.
+  ()=>db.exec(`ALTER TABLE photos ADD COLUMN caption TEXT NOT NULL DEFAULT ''`),
  ];
  // The version is read inside the write lock, so the service and the key CLI never apply a migration twice.
  for(const [index,migrate] of migrations.entries()){

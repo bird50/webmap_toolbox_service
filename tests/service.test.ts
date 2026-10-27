@@ -23,7 +23,7 @@ test("Public upload from local photos: validation, atomicity, filters and persis
  const dir=mkdtempSync(join(tmpdir(),"toolbox-test-")),path=join(dir,"test.sqlite"),key="test-service-key-that-is-at-least-32-characters";
  let service=createService(path,key);
  const call=(path:string,method="GET",body?:BodyInit)=>service.handle(new Request(`http://localhost${path}`,{method,headers:{authorization:`Bearer ${key}`,"x-toolbox-owner":"guest:alice","x-toolbox-username":"Alice"},body}));
- const form=async(date=true)=>{const body=new FormData();body.set("eventName","Flood");body.set("tags",JSON.stringify(["survey"]));body.append("photos",new File([await fixture(true,date)],"sample.jpg",{type:"image/jpeg"}));return body;};
+ const form=async(date=true)=>{const body=new FormData();body.set("eventName","Flood");body.set("tags",JSON.stringify(["survey"]));body.set("captions",JSON.stringify(["  น้ำล้นตลิ่ง  "]));body.append("photos",new File([await fixture(true,date)],"sample.jpg",{type:"image/jpeg"}));return body;};
  try{
  assert.equal((await service.handle(new Request("http://localhost/public/photos"))).status,401);
  assert.equal((await call("/my-photos")).status,404);
@@ -34,6 +34,15 @@ test("Public upload from local photos: validation, atomicity, filters and persis
  const publicPhotos=(await (await call(query)).json()).photos;assert.equal(publicPhotos.length,1);
  const image=await call(`/shares/${share.id}/photos/${publicPhotos[0].id}`);assert.equal(image.status,200);assert.equal((await sharp(Buffer.from(await image.arrayBuffer())).metadata()).exif,undefined);
  assert.equal((await (await call(`/shares/${share.id}`)).json()).photos.length,1);
+ assert.equal(publicPhotos[0].caption,'น้ำล้นตลิ่ง','captions are trimmed and returned with public photos');
+ assert.equal((await (await call(`/shares/${share.id}`)).json()).photos[0].caption,'น้ำล้นตลิ่ง');
+ const longCaption=await form();longCaption.set("captions",JSON.stringify(["x".repeat(501)]));assert.equal((await call("/shares","POST",longCaption)).status,400);
+ assert.deepEqual([share.appName,share.username],['default','Alice'],'without an app name header the app ID is stored');
+ const named=await service.handle(new Request("http://localhost/shares",{method:"POST",headers:{authorization:`Bearer ${key}`,"x-toolbox-owner":"guest:bob","x-toolbox-app-name":encodeURIComponent("ThaiWater GIS")},body:await form()}));
+ const anonymous=await named.json();assert.equal(named.status,201);
+ assert.deepEqual([anonymous.appName,anonymous.username],['ThaiWater GIS','anonymous'],'no username is stored as anonymous');
+ const page=await (await call(`/shares/${anonymous.id}`)).json();assert.deepEqual([page.appName,page.username],['ThaiWater GIS','anonymous']);
+ assert.equal((await call(`/shares/${anonymous.id}`,"DELETE")).status,200);
  for(const filter of ["eventName=Flood","tag=survey","username=Alice","startDate=2026-10-18&endDate=2026-10-18","eventName=missing&tag=survey"]){assert.equal((await (await call(`${query}&${filter}`)).json()).photos.length,1);}
  assert.equal((await (await call(`${query}&tag=missing`)).json()).photos.length,0);
  assert.equal((await (await call("/public/photos?bbox=170,-20,-170,20")).json()).photos.length,0);

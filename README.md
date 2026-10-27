@@ -37,12 +37,12 @@ Migration 2 (1.2) adds `data_file_shares`, `data_features` and `data_feature_bou
 
 ## API contract
 
-All endpoints require `Authorization: Bearer <key>` (see scopes above; `/health` accepts any valid key). Keep this service on a private network; the web server is the trusted authentication gateway. Do not expose the key to browsers. Publication requests additionally require `X-Toolbox-Owner` and URL-encoded `X-Toolbox-Username` supplied by the gateway after checking the session or signed guest cookie. Never forward client-supplied identity headers.
+All endpoints require `Authorization: Bearer <key>` (see scopes above; `/health` accepts any valid key). Keep this service on a private network; the web server is the trusted authentication gateway. Do not expose the key to browsers. Publication requests additionally require `X-Toolbox-Owner` supplied by the gateway after checking the session or signed guest cookie, and accept URL-encoded `X-Toolbox-Username` (the app user; stored as `anonymous` when missing or empty) and `X-Toolbox-App-Name` (the app's display name, at most 100 characters; the key's app ID when missing). Every share row stores `appId` (from the key), `appName`, `owner` and `username`; POST responses and `GET /shares/:id` return `appName` and `username`. Migration v3 adds `appName` and fills older rows with their app ID. Never forward client-supplied identity headers.
 
 | Method/path | Input / access |
 | --- | --- |
 | GET /health | Service health |
-| POST /shares | Authenticated gateway identity; multipart `eventName`, JSON-encoded `tags`, and 1–10 `photos` files |
+| POST /shares | Authenticated gateway identity; multipart `eventName`, JSON-encoded `tags`, 1–10 `photos` files and optional JSON-encoded `captions` (strings up to 500 characters in photo order; returned as `caption` by `GET /public/photos` and `GET /shares/:id`, migration v4) |
 | GET /public/photos | Public through gateway; required bbox, limit 1–200, optional username/eventName/tag/startDate/endDate |
 | GET /shares/:id | Public through gateway; share metadata and at most 10 photos |
 | GET /shares/:shareId/photos/:photoId | Public through gateway; sanitized JPEG |

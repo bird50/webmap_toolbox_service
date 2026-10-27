@@ -1,15 +1,17 @@
 import {randomUUID, timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
 import {boundedFormData,prepareSharedPhoto,PhotoUploadError} from './upload.js';
-import {shareFields,automaticShareTag} from './photo-share.js';
+import {shareFields,automaticShareTag,photoCaptions} from './photo-share.js';
 import {dataFileShareSchema,MAX_DATA_SHARE_BYTES,positions,publicDataFileQuery} from './data-file-share.js';
 import {publicPhotoQuery} from './public-photo-query.js';
 import {drawingShareSchema} from './drawing-contract.js';
 import {openDatabase} from './database.js';
 import {activeKeyCount,resolveKey,SCOPES,type Caller,type Scope} from './api-keys.js';
 const id=z.string().uuid();
-const identity=z.object({owner:z.string().min(1).max(160),username:z.string().max(100)});
-type Row={id:string;name:string;longitude:number;latitude:number;capturedAt:string|null;capturedOffset:string|null;createdAt:number;expiresAt:number|null;shareId?:string|null;eventName?:string;tags?:string;username?:string;image:Uint8Array};
+/** Who published: the gateway's owner ID (for deletes), the app user's name (`anonymous` when the gateway names none) and the app's display name. */
+export const ANONYMOUS='anonymous';
+const identity=z.object({owner:z.string().min(1).max(160),username:z.string().trim().max(100).transform(name=>name||ANONYMOUS),appName:z.string().trim().max(100)});
+type Row={id:string;name:string;longitude:number;latitude:number;capturedAt:string|null;capturedOffset:string|null;createdAt:number;expiresAt:number|null;shareId?:string|null;caption?:string;eventName?:string;tags?:string;username?:string;image:Uint8Array};
 /**
  * `legacyKey` (TOOLBOX_SERVICE_KEY) keeps working as a key for `defaultAppId` with every scope; keys created with
  * `npm run key:create` are looked up in api_keys. Every row belongs to the calling key's app and no app sees another's.
@@ -29,43 +31,44 @@ export function createService(path:string,legacyKey='',{defaultAppId='default'}:
  const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
  function transaction<T>(fn:()=>T){db.exec('BEGIN IMMEDIATE');try{const value=fn();db.exec('COMMIT');return value;}catch(error){db.exec('ROLLBACK');throw error;}}
  const audit=(app:string,owner:string,action:string,resourceId:string)=>db.prepare('INSERT INTO audit(id,owner,action,resourceId,createdAt,appId) VALUES(?,?,?,?,?,?)').run(randomUUID(),owner,action,resourceId,Date.now(),app);
- const meta=(p:Row)=>({id:p.id,name:p.name,longitude:p.longitude,latitude:p.latitude,capturedAt:p.capturedAt,capturedOffset:p.capturedOffset,createdAt:p.createdAt,expiresAt:p.expiresAt,url:`/api/photo-shares/${p.shareId}/photos/${p.id}`,shareUrl:p.shareId?`/share/${p.shareId}`:undefined,...(p.tags?{tags:JSON.parse(p.tags),eventName:p.eventName,username:p.username}:{})});
- const columns='p.id,p.name,p.longitude,p.latitude,p.capturedAt,p.capturedOffset,p.createdAt,p.expiresAt,p.shareId';
+ const meta=(p:Row)=>({id:p.id,name:p.name,longitude:p.longitude,latitude:p.latitude,capturedAt:p.capturedAt,capturedOffset:p.capturedOffset,createdAt:p.createdAt,expiresAt:p.expiresAt,url:`/api/photo-shares/${p.shareId}/photos/${p.id}`,...(p.caption?{caption:p.caption}:{}),shareUrl:p.shareId?`/share/${p.shareId}`:undefined,...(p.tags?{tags:JSON.parse(p.tags),eventName:p.eventName,username:p.username}:{})});
+ const columns='p.id,p.name,p.longitude,p.latitude,p.capturedAt,p.capturedOffset,p.createdAt,p.expiresAt,p.shareId,p.caption';
  return {close:()=>db.close(),async handle(request:Request):Promise<Response>{try{
  const caller=authenticate(request.headers.get('authorization'));
  if(!caller)return json({error:'Unauthorized'},401);
  const app=caller.appId,denied=(scope:Scope)=>caller.scopes.includes(scope)?undefined:json({error:'Forbidden'},403);
  const url=new URL(request.url),path=url.pathname;
- const who=()=>identity.parse({owner:request.headers.get('x-toolbox-owner'),username:decodeURIComponent(request.headers.get('x-toolbox-username')??'')});
+ const header=(name:string)=>decodeURIComponent(request.headers.get(name)??'');
+ const who=()=>{const found=identity.parse({owner:request.headers.get('x-toolbox-owner'),username:header('x-toolbox-username'),appName:header('x-toolbox-app-name')});return {...found,appName:found.appName||app};};
  if(path==='/health'&&request.method==='GET')return json({status:'ok'});
  if(path==='/drawing-shares'&&request.method==='POST'){
  const forbidden=denied('write');if(forbidden)return forbidden;
- const {owner,username}=who();
+ const {owner,username,appName}=who();
  if(!request.headers.get('content-type')?.startsWith('application/json'))return json({error:'ต้องส่ง JSON'},400);
  const body=await request.text();if(Buffer.byteLength(body)>1024*1024)return json({error:'ข้อมูลเกิน 1 MB'},413);
  const data=drawingShareSchema.parse(JSON.parse(body));
  const result=transaction(()=>{
- const shareId=randomUUID();db.prepare('INSERT INTO drawing_shares(id,owner,username,name,createdAt,appId) VALUES(?,?,?,?,?,?)').run(shareId,owner,username,data.name,Date.now(),app);
+ const shareId=randomUUID();db.prepare('INSERT INTO drawing_shares(id,owner,username,name,createdAt,appId,appName) VALUES(?,?,?,?,?,?,?)').run(shareId,owner,username,data.name,Date.now(),app,appName);
  for(const d of data.drawings){const drawingId=randomUUID();const inserted=db.prepare('INSERT INTO drawings VALUES(?,?,?)').run(drawingId,shareId,JSON.stringify({...d,id:drawingId}));
  const xs=d.points.map(p=>p[0]),ys=d.points.map(p=>p[1]);
  db.prepare('INSERT INTO drawing_bounds VALUES(?,?,?,?,?)').run(inserted.lastInsertRowid,Math.min(...xs),Math.max(...xs),Math.min(...ys),Math.max(...ys));}
- audit(app,owner,'DRAWING_SHARE_PUBLISHED',shareId);return {id:shareId,count:data.drawings.length};});return json(result,201);
+ audit(app,owner,'DRAWING_SHARE_PUBLISHED',shareId);return {id:shareId,count:data.drawings.length,appName,username};});return json(result,201);
  }
  if(path==='/data-file-shares'&&request.method==='POST'){
  const forbidden=denied('write');if(forbidden)return forbidden;
- const {owner,username}=who();
+ const {owner,username,appName}=who();
  if(!request.headers.get('content-type')?.startsWith('application/json'))return json({error:'ต้องส่ง JSON'},400);
  const body=await request.text();if(Buffer.byteLength(body)>MAX_DATA_SHARE_BYTES)return json({error:'ข้อมูลเกิน 5 MB'},413);
  const share=dataFileShareSchema.parse(JSON.parse(body));
  const result=transaction(()=>{
  const shareId=randomUUID(),tags=[automaticShareTag(),...new Set(share.tags)];
- db.prepare('INSERT INTO data_file_shares(id,appId,owner,username,name,description,tags,featureCount,createdAt) VALUES(?,?,?,?,?,?,?,?,?)').run(shareId,app,owner,username,share.name,share.description,JSON.stringify(tags),share.data.features.length,Date.now());
+ db.prepare('INSERT INTO data_file_shares(id,appId,appName,owner,username,name,description,tags,featureCount,createdAt) VALUES(?,?,?,?,?,?,?,?,?,?)').run(shareId,app,appName,owner,username,share.name,share.description,JSON.stringify(tags),share.data.features.length,Date.now());
  for(const feature of share.data.features){
   const inserted=db.prepare('INSERT INTO data_features(shareId,data) VALUES(?,?)').run(shareId,JSON.stringify(feature));
   const points=positions(feature.geometry.coordinates),xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);
   db.prepare('INSERT INTO data_feature_bounds VALUES(?,?,?,?,?)').run(inserted.lastInsertRowid,Math.min(...xs),Math.max(...xs),Math.min(...ys),Math.max(...ys));
  }
- audit(app,owner,'DATA_FILE_SHARE_PUBLISHED',shareId);return {id:shareId,count:share.data.features.length,tags};});return json(result,201);
+ audit(app,owner,'DATA_FILE_SHARE_PUBLISHED',shareId);return {id:shareId,count:share.data.features.length,tags,appName,username};});return json(result,201);
  }
  if(path==='/public/data-files'&&request.method==='GET'){
  const forbidden=denied('read');if(forbidden)return forbidden;
@@ -93,18 +96,19 @@ export function createService(path:string,legacyKey='',{defaultAppId='default'}:
  }
  if(path==='/shares'&&request.method==='POST'){
  const forbidden=denied('write');if(forbidden)return forbidden;
- const {owner,username}=who();
+ const {owner,username,appName}=who();
  const form=await boundedFormData(request);
  const fields=shareFields.parse({eventName:form.get('eventName'),tags:JSON.parse(String(form.get('tags')??'[]'))});
  const files=form.getAll('photos');
+ const captions=photoCaptions.parse(JSON.parse(String(form.get('captions')??'[]')));
  if(!files.length||files.length>10||files.some(file=>!(file instanceof File)))throw new PhotoUploadError('เลือกภาพ 1–10 รูป');
  const photos:Awaited<ReturnType<typeof prepareSharedPhoto>>[]=[];
  for(const [index,file] of (files as File[]).entries())photos.push(await prepareSharedPhoto(file,index));
  const result=transaction(()=>{
  const shareId=randomUUID(),tags=[automaticShareTag(),...new Set(fields.tags)];
- db.prepare('INSERT INTO shares(id,owner,username,eventName,tags,createdAt,appId) VALUES(?,?,?,?,?,?,?)').run(shareId,owner,username,fields.eventName,JSON.stringify(tags),Date.now(),app);
- for(const p of photos)db.prepare('INSERT INTO photos VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),owner,p.name,p.longitude,p.latitude,p.capturedAt,p.capturedOffset,Date.now(),null,shareId,p.image);
- audit(app,owner,'PHOTO_SHARE_PUBLISHED',shareId);return {id:shareId,tags,url:`/share/${shareId}`};});return json(result,201);
+ db.prepare('INSERT INTO shares(id,owner,username,eventName,tags,createdAt,appId,appName) VALUES(?,?,?,?,?,?,?,?)').run(shareId,owner,username,fields.eventName,JSON.stringify(tags),Date.now(),app,appName);
+ for(const [index,p] of photos.entries())db.prepare('INSERT INTO photos(id,owner,name,longitude,latitude,capturedAt,capturedOffset,createdAt,expiresAt,shareId,image,caption) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),owner,p.name,p.longitude,p.latitude,p.capturedAt,p.capturedOffset,Date.now(),null,shareId,p.image,captions[index]??'');
+ audit(app,owner,'PHOTO_SHARE_PUBLISHED',shareId);return {id:shareId,tags,url:`/share/${shareId}`,appName,username};});return json(result,201);
  }
  if(path==='/public/photos'&&request.method==='GET'){
  const forbidden=denied('read');if(forbidden)return forbidden;
@@ -136,7 +140,7 @@ export function createService(path:string,legacyKey='',{defaultAppId='default'}:
  });
  return json({id:shareId,deleted:true});
  }
- if(shareMatch&&shareMatch[1]==='shares'&&request.method==='GET'){const forbidden=denied('read');if(forbidden)return forbidden;const shareId=id.parse(shareMatch[2]);const share=db.prepare('SELECT eventName,tags FROM shares WHERE id=? AND appId=?').get(shareId,app) as {eventName:string;tags:string}|undefined;if(!share)return json({error:'ไม่พบข้อมูล'},404);return json({...share,tags:JSON.parse(share.tags),photos:(db.prepare(`SELECT ${columns} FROM photos p WHERE shareId=? ORDER BY createdAt,id LIMIT 10`).all(shareId) as Row[]).map(meta)});}
+ if(shareMatch&&shareMatch[1]==='shares'&&request.method==='GET'){const forbidden=denied('read');if(forbidden)return forbidden;const shareId=id.parse(shareMatch[2]);const share=db.prepare('SELECT eventName,tags,username,appName FROM shares WHERE id=? AND appId=?').get(shareId,app) as {eventName:string;tags:string;username:string;appName:string}|undefined;if(!share)return json({error:'ไม่พบข้อมูล'},404);return json({...share,tags:JSON.parse(share.tags),photos:(db.prepare(`SELECT ${columns} FROM photos p WHERE shareId=? ORDER BY createdAt,id LIMIT 10`).all(shareId) as Row[]).map(meta)});}
  const publicMatch=path.match(/^\/shares\/([^/]+)\/photos\/([^/]+)$/);
  if(publicMatch&&request.method==='GET'){
  const forbidden=denied('read');if(forbidden)return forbidden;
