@@ -14,7 +14,9 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "key:create": "node --env-file-if-exists=.env --import tsx src/keys.ts create",
     "key:list": "node --env-file-if-exists=.env --import tsx src/keys.ts list",
-    "key:revoke": "node --env-file-if-exists=.env --import tsx src/keys.ts revoke"
+    "key:revoke": "node --env-file-if-exists=.env --import tsx src/keys.ts revoke",
+    "contracts:sync": "node scripts/contracts.mjs",
+    "contracts:check": "node scripts/contracts.mjs --check"
   },
   "dependencies": {
     "exifr": "^7.1.3",

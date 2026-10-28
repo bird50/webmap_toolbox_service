@@ -1,0 +1,21 @@
+# Owners review pull requests that touch their paths (see ../toolbox_sdk/CONTRIBUTING.md).
+# Replace @bird50 on the module lines with each tool owner's GitHub name. The last matching line wins.
+
+# Maintainer: server, keys, auth, database, shared module context and contract copies.
+*                              @bird50
+
+# Photo
+/src/modules/photos.ts         @bird50
+/src/upload.ts                 @bird50
+
+# Draw
+/src/modules/drawings.ts       @bird50
+/tests/drawings.test.ts        @bird50
+/tests/drawing-sets.test.ts    @bird50
+
+# Data Files
+/src/modules/data-files.ts     @bird50
+/tests/data-files.test.ts      @bird50
+
+# src/contracts/ is copied from the SDK (npm run contracts:sync); review contract changes in the SDK.
+/src/contracts/                @bird50

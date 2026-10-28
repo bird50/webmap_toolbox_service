@@ -1,14 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createService} from '../src/service.js';
-import {automaticShareTag} from '../src/share-tags.js';
+import {automaticShareTag} from '../src/contracts/share-tags.js';
 import {randomUUID} from 'node:crypto';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openDatabase} from '../src/database.js';
 import {createKey} from '../src/api-keys.js';
-import {publicDataFileSetResponse,publicDataFileShare} from '../src/public-data-file-sets.js';
+import {publicDataFileSetResponse,publicDataFileShare} from '../src/contracts/public-data-file-sets.js';
 
 const key='test-data-files-service-key-at-least-32-characters';
 const point=(x:number,y:number,properties:Record<string,unknown>={})=>({type:'Feature',properties,geometry:{type:'Point',coordinates:[x,y]}});

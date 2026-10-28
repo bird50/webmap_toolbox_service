@@ -1,8 +1,8 @@
 import {randomUUID} from 'node:crypto';
-import {automaticShareTag} from '../photo-share.js';
-import {dataFileShareSchema,MAX_DATA_SHARE_BYTES,positions,publicDataFileQuery} from '../data-file-share.js';
-import {publicDataFileSetQuery} from '../public-data-file-sets.js';
-import {publishedRange} from '../share-tags.js';
+import {automaticShareTag} from '../contracts/photo-share.js';
+import {dataFileShareSchema,MAX_DATA_SHARE_BYTES,positions,publicDataFileQuery} from '../contracts/data-file-share.js';
+import {publicDataFileSetQuery} from '../contracts/public-data-file-sets.js';
+import {publishedRange} from '../contracts/share-tags.js';
 import {deleteShare,id,type ToolModule} from './context.js';
 
 /** Public data file sets: POST /data-file-shares, GET /public/data-file-shares, GET|DELETE /data-file-shares/:id, GET /public/data-files. */

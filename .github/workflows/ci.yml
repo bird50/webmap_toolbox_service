@@ -1,0 +1,32 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toolbox_service
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: toolbox_service
+      # Contracts in src/contracts/ must match the SDK's main branch (scripts/contracts.mjs).
+      - uses: actions/checkout@v4
+        with:
+          repository: bird50/webmap_toolbox_sdk
+          ref: main
+          path: toolbox_sdk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: toolbox_service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run contracts:check
+      - run: npm test

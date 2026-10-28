@@ -2,7 +2,7 @@ import {createServer} from 'node:http';
 import {mkdirSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {createService} from './service.js';
-import {MAX_DATA_SHARE_BYTES} from './data-file-share.js';
+import {MAX_DATA_SHARE_BYTES} from './contracts/data-file-share.js';
 import {parseModules} from './modules/index.js';
 const bodyLimit=(path?:string)=>path==='/drawing-shares'?1024*1024:path==='/data-file-shares'?MAX_DATA_SHARE_BYTES:25*1024*1024;
 const path=resolve(process.env.SQLITE_PATH??'./data/toolbox.sqlite');mkdirSync(dirname(path),{recursive:true});

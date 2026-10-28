@@ -1,8 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import {boundedFormData,prepareSharedPhoto,PhotoUploadError} from '../upload.js';
-import {shareFields,automaticShareTag,photoCaptions} from '../photo-share.js';
-import {publicPhotoQuery} from '../public-photo-query.js';
-import {publicPhotoSetQuery} from '../public-photo-sets.js';
+import {shareFields,automaticShareTag,photoCaptions} from '../contracts/photo-share.js';
+import {publicPhotoQuery} from '../contracts/public-photo-query.js';
+import {publicPhotoSetQuery} from '../contracts/public-photo-sets.js';
 import {deleteShare,id,type ToolModule} from './context.js';
 
 type Row={id:string;name:string;longitude:number;latitude:number;capturedAt:string|null;capturedOffset:string|null;createdAt:number;expiresAt:number|null;shareId?:string|null;caption?:string;eventName?:string;tags?:string;username?:string;image:Uint8Array};

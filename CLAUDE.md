@@ -14,7 +14,8 @@ Private Node.js 22 HTTP service that stores **Public** photos, drawings and data
 | `src/database.ts` | `openDatabase(path, defaultAppId, schemas)`: frozen legacy list on `PRAGMA user_version` 1–4, then per-module versions in `schema_modules` (core + enabled modules only) |
 | `src/api-keys.ts`, `src/keys.ts` | Key store (SHA-256 hashes, scopes `read`/`write`/`moderate`) and the `key:create`/`key:list`/`key:revoke` CLI |
 | `src/upload.ts` | multipart parsing, EXIF check, sharp re-encode to JPEG (≤2400 px, metadata stripped) |
-| `src/photo-gps.ts`, `photo-share.ts`, `share-tags.ts`, `public-photo-query.ts`, `public-photo-sets.ts`, `drawing-contract.ts`, `public-drawing-sets.ts`, `data-file-share.ts`, `public-data-file-sets.ts` | Validation and contracts — **byte-identical copies of `../toolbox_sdk/src/core/*`** |
+| `src/contracts/*.ts` | Validation and contracts — **byte-identical copies of `../toolbox_sdk/src/contracts/*`**: never edit here; change the SDK, then `npm run contracts:sync` (`npm run contracts:check` in CI) |
+| `scripts/contracts.mjs` | Contract sync/check against `../toolbox_sdk` (or `TOOLBOX_SDK_DIR`) |
 
 Routes (each only when its module is enabled): `GET /health`, `POST /shares`, `GET /public/photos`, `GET /public/photo-shares`, `GET /shares/:id`, `GET /shares/:shareId/photos/:photoId`, `POST /drawing-shares`, `GET /public/drawing-shares`, `GET /drawing-shares/:id`, `GET /public/drawings`, `POST /data-file-shares`, `GET /public/data-file-shares`, `GET /data-file-shares/:id`, `GET /public/data-files`, `DELETE /shares/:id`, `DELETE /drawing-shares/:id`, `DELETE /data-file-shares/:id`.
 
@@ -23,12 +24,16 @@ Routes (each only when its module is enabled): `GET /health`, `POST /shares`, `G
 - **Tenants.** Every key belongs to one app; every new query must filter by the caller's `appId` and every route must check a scope (`denied(...)`). Tests in `tests/api-keys.test.ts` cover isolation, scopes, deletion and migration.
 - **Trust boundary.** Every route requires `Authorization: Bearer <key>` (a table key or the legacy `TOOLBOX_SERVICE_KEY`). Owner identity comes only from gateway headers `X-Toolbox-Owner` / `X-Toolbox-Username` (empty = `anonymous`) / `X-Toolbox-App-Name` (empty = app ID); never accept identity from request bodies, and never return owner IDs in public responses.
 - **Keep it private.** Default bind is `127.0.0.1:4010`; do not add CORS or expose it publicly. Browser-facing concerns (sessions, CSRF/same-origin, rate limits) belong to the gateway.
-- **Contract changes span three projects.** Changing a route, field or limit means updating the shared contract files here and in `../toolbox_sdk/src/core` identically, the SDK client/components, and the web gateway routes. Keep limits in sync (25 MiB / 10 photos / 1 MiB drawings / 5 MiB and 5,000 features per data file share / 200 photos, 50 drawings and 1,000 data file features per response).
+- **Contract changes span three projects.** Changing a route, field or limit means changing the contract in `../toolbox_sdk/src/contracts` and syncing it here (`npm run contracts:sync`), the SDK client/components, and the web gateway routes. Keep limits in sync (25 MiB / 10 photos / 1 MiB drawings / 5 MiB and 5,000 features per data file share / 200 photos, 50 drawings and 1,000 data file features per response).
 - **SQL.** Parameterized placeholders only. Multi-row writes (share + photos/drawings + bounds + audit) stay in one transaction so failed batches save nothing.
 - **Images.** Coordinates and capture time come from EXIF in the bytes, never from client fields; always re-encode through sharp before storing.
 - **Schema.** Each module owns its tables: add a change as a new entry at the end of that module's `migrations` (core tables: `core` in `src/database.ts`); never edit or reorder an applied entry. Versions live in `schema_modules(module, version)`. The pre-1.5 global list on `PRAGMA user_version` (1–4) is frozen: such databases finish it once and are adopted with every module at version 1 (`user_version` stays 4). A module's first migration must equal its v4 tables; `tests/modules.test.ts` compares a fresh and an upgraded schema. Existing `data/toolbox.sqlite` files are migrated on start.
 - **Modules.** `TOOLBOX_MODULES` (default all) picks the tools an instance serves; a disabled module answers 404 and creates no tables on a fresh database (tables of an adopted database stay untouched). A new tool is a new `src/modules/*.ts` registered in `index.ts` and `MODULE_NAMES`.
 - Never commit `.env` or `data/` (both are git-ignored). `TOOLBOX_SERVICE_KEY` must be ≥32 random characters and equal the web app's value.
+
+## Team
+
+Each tool's module (`src/modules/<module>.ts`) has an owner (`.github/CODEOWNERS`); the server, keys, database and `modules/context.ts` belong to the maintainer. The pull request flow is in `../toolbox_sdk/CONTRIBUTING.md`. CI (`.github/workflows/ci.yml`) runs lint, `contracts:check` against the SDK's `main` and tests.
 
 ## Commands
 
@@ -37,6 +42,8 @@ npm run dev     # tsx --watch; restarts on src changes
 npm start       # production process (needs tsx installed)
 npm run lint    # tsc --noEmit (same as build)
 npm test        # node:test against temporary SQLite files
+npm run contracts:sync   # copy src/contracts from ../toolbox_sdk
+npm run contracts:check  # fail when a copy differs
 npm audit
 ```
 

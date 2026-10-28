@@ -1,6 +1,6 @@
 import sharp from "sharp";
-import {readPhotoMetadata} from "./photo-gps.js";
-import {MAX_SHARE_BYTES} from "./photo-share.js";
+import {readPhotoMetadata} from "./contracts/photo-gps.js";
+import {MAX_SHARE_BYTES} from "./contracts/photo-share.js";
 
 export class PhotoUploadError extends Error {
   constructor(message:string,public status=400){super(message);}

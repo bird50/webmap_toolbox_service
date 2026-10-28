@@ -19,6 +19,8 @@ Environment: `HOST` defaults to `127.0.0.1`, `PORT` to `4010`, `SQLITE_PATH` to 
 
 Each tool is a module with its own routes and tables: `photos` (`/shares…`, `/public/photos`, `/public/photo-shares`), `drawings` (`/drawing-shares…`, `/public/drawing-shares`, `/public/drawings`) and `data-files` (`/data-file-shares…`, `/public/data-file-shares`, `/public/data-files`). `TOOLBOX_MODULES` is a comma list of the modules this instance serves, for example `TOOLBOX_MODULES=photos` for an app that only publishes photos. Routes of a disabled module answer `404 {"error":"Not found"}`, and its tables are not created on a fresh database; enabling it later creates them on the next start. Unknown names stop the service at startup. `/health`, keys and audit are always available.
 
+Request and response schemas live in `src/contracts/`, copied byte-identical from the SDK's `src/contracts/`: run `npm run contracts:sync` after a contract change in `../toolbox_sdk` (or `TOOLBOX_SDK_DIR`); `npm run contracts:check` fails when a copy differs and runs in CI. Each module has an owner for team work (`.github/CODEOWNERS`, `../toolbox_sdk/CONTRIBUTING.md`).
+
 Schema versions are kept per module in the `schema_modules` table. Databases from 1.4 or earlier (`PRAGMA user_version` 1–4) first finish the old global migrations, then every module is recorded at version 1 with all existing rows kept, including tables of modules that are disabled; `user_version` stays 4.
 
 ## Apps and API keys
